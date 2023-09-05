@@ -1,0 +1,249 @@
+---
+title: "Lan_Mouland_Assign3"
+author: "Lan Dawei Y. Mouland"
+date: "2023-03-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Question 1: 
+
+Question 1a: We do not need to separate the data into training and test sets because clustering is an unsupervised method. 
+
+Question 1b:
+```{r}
+if(!(require(data.table))){install.packages('data.table')}
+library(data.table)
+if(!(require(data.table))){install.packages('class')}
+library(class)
+Adcsv = fread("ad.csv")
+set.seed(1)
+
+Adcsv = Adcsv[,-1] #excluding column 1 since it is just an index. 
+
+
+#because of the range of data, scaling would be appropriate here. Hooman suggusted as such in the disccusion board.
+indexs = sample(nrow(Adcsv), size = 200, replace = FALSE)
+
+scales = scale(Adcsv)
+
+means = attr(scales, "scaled:center") #retain mean from training set
+sds = attr(scales, "scaled:scale")
+
+scale.Adcsv = data.frame(scale(Adcsv[,1:4], center = means, scale = sds))
+
+Adcsv = scale.Adcsv[indexs,]
+
+
+km3 = kmeans(Adcsv, centers = 3, nstart = 10) #cluster with 3 k means 
+km4 = kmeans(Adcsv, centers = 4, nstart = 10) #cluster with 4 k means 
+```
+
+Question 1c:
+```{r}
+plot(Adcsv, col = (km3$cluster), main = "K-means Clustering @ K = 3")
+```
+Answer 1c: When the data is scaled, clusters are tighter. News paper and radio observations are similar across clusters. TV is dissimilar to other clusters across all variables. TV and ratio seems to follow an upward trend in relation to sales across clusters, newspaper however does not follow the same pattern. 
+
+Question 1d: 
+```{r}
+
+clust.err = km4$withinss
+total.err = km4$tot.withinss
+
+# calculate within-cluster error ratio for each cluster
+err.ratio = clust.err / total.err
+
+# plot the errors
+barplot(err.ratio, main = "Within-cluster error ratio", 
+        xlab = "Cluster", ylab = "Ratio", col = "blue", names.arg = c("Cluster 1","Cluster 2","Cluster 3","Cluster 4")) #need to add names on x axis
+
+```
+answer 1d: The most homogeneous cluster is Cluster 2  It has the lowest within-cluster error ratio. 
+
+Question 1e: 
+```{r}
+hier.ad = hclust(dist(Adcsv), method = "complete")
+cutree(hier.ad, k = 4) #k to determine clusters 
+
+length(unique(cutree(hier.ad, k = 4))) #number of clusters 
+
+plot(hier.ad, main = "Complete Linkage", xlab = "", ylab = "")
+
+#abline(h = 1, col = "red")
+#abline(h = 2, col = "red")
+#abline(h = 3, col = "red")
+```
+answer 1e: Cluster 1: 1:48, Cluster 2: 49:95, Cluster 3: 96:142, Cluster 4: 143:200
+
+
+Question 1f: 
+```{r}
+haircut = cutree(hier.ad, h=3)
+length(unique(haircut)) #h level of dissimilarity. 
+```
+answer 1f: There are 12 unique clusters.
+
+Question 2:
+```{r}
+if(!(require(data.table))){install.packages('MASS')}
+library(MASS)
+if(!(require(data.table))){install.packages('neuralnet')}
+library(neuralnet)
+if(!(require(data.table))){install.packages('dplyr')}
+library(dplyr)
+if(!(require(data.table))){install.packages('nnet')}
+library(nnet)
+
+data("Boston") %>% as.data.frame()
+
+
+set.seed(1)
+
+index = sample(nrow(Boston), size = 400, replace = FALSE)
+
+maxs = apply(Boston[index,], 2, base::max)
+mins = apply(Boston[index,], 2, base::min)
+
+scale = data.frame(scale(Boston, center = mins, scale = (maxs - mins)))
+
+trainNN = scale[index,]
+testNN = scale[-index,]
+
+NN = neuralnet(medv ~., trainNN, linear.output = TRUE, lifesign = "minimal")
+
+plot(NN)
+
+```
+
+Question 2b:
+```{r}
+set.seed(1)
+pred.test = neuralnet::compute(NN, testNN[,1:13]) #using all columns less medv
+pred.res = (pred.test$net.result * (maxs[14] - mins[14])) + mins[14] #predicted medv values 
+
+plot(Boston$medv[-index], pred.res, pch = 16, col = "blue", xlab = "Actual", ylab = "Predicted")
+abline(coef = c(0,1))
+
+MSE = sum((testNN$medv - pred.res)^2) / nrow(testNN)
+MSE #Accuracy based on mean squared error. 
+
+RMSE = sqrt(sum((testNN$medv - pred.res)^2)/ nrow(testNN))
+RMSE
+```
+Question 2b: MSE of 520.5176, RMSE of 22.81485. This MSE suggusts that the model is not that accurate. This is supported by the plot where most data points do not lie on the trendline. 
+
+Question 3:
+
+Question 3a:
+```{r}
+if(!(require(data.table))){install.packages('neuralnet')}
+library(neuralnet)
+if(!(require(data.table))){install.packages('data.table')}
+library(data.table)
+if(!(require(data.table))){install.packages('nnet')}
+library(nnet)
+
+
+#on.shop = fread("online_shoppers_intention2.csv")
+on.shop = fread("online_shoppers_intention2.csv", colClasses = c("numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "factor", "factor", "factor"), )
+
+set.seed(1)
+
+indexs = sample(nrow(on.shop), size = 2000, replace = FALSE)
+
+maxs = apply(on.shop[indexs, 1:10], 2, base::max)  
+mins = apply(on.shop[indexs, 1:10], 2, base::min)
+
+scales = data.frame(scale(on.shop[,1:10], center = mins, scale = (maxs - mins)), 
+                    vistor = lapply(on.shop[,11], class.ind),
+                    weekend = lapply(on.shop[,12], class.ind),
+                    revenue = lapply(on.shop[,13], class.ind))
+
+
+trainNN2 = scales[indexs,] 
+testNN2 = scales[-indexs,]
+
+NN = neuralnet(revenue.Revenue.FALSE + revenue.Revenue.TRUE ~., trainNN2, hidden = rep(10,3), linear.output = F)
+par(mfrow = c(1,1))
+plot(NN)
+```
+
+Question 3b:
+```{r}
+pred.test = neuralnet::compute(NN, testNN2[,1:15]) #using all columns less medv
+pred.nn.test = apply(pred.test$net.result, 1, base::which.max)
+test.act = max.col(testNN2[,16:17])
+
+mean(pred.nn.test == test.act) #accuracy CHECK THE DISCUSSION BOARD HOOMAN SAID THERE WAS A MISTAKE "Good catch, Daniel. You are correct! This is a typo, sorry. Please calculate the accuracy of model in terms of prediction accuracy, not MSE."
+
+table(pred.nn.test, test.act) #Confusion matrix. 
+#2 is revenue generated, 1 is revenue not generated
+
+```
+answer 3b: Prediction accuracy is 0.8617619.
+
+Question 4: 
+
+Question 4a:
+```{r}
+accent = fread("accent-mfcc-data-1.csv", colClasses = c("factor", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric","numeric"))
+
+if(!(require(data.table))){install.packages('e1071')}
+library(e1071)
+
+set.seed(1)
+
+indexs = sample(nrow(accent), size = 280, replace = FALSE)
+
+acc.train = accent[indexs,] 
+acc.test = accent[-indexs,]
+
+accent.svm = svm(language ~., data = acc.train, kernel = "radial", cost = 4, scale = TRUE) #scaling is done here 
+```
+question 4b:
+```{r}
+pred = predict(accent.svm, acc.test)
+
+mean(pred == acc.test$language) #accuracy 
+
+table(pred, acc.test$language) #CM 
+
+```
+question 4b: 81.63% accurate. 
+
+
+
+
+##########################################################################################################
+Ignore the below comments
+
+```{r}
+#question 3b:
+#pred.res = pred.test$net.result
+#MSE = sum((testNN2$revenue.Revenue.FALSE+testNN2$revenue.Revenue.TRUE - pred.res)^2)/nrow(testNN2)
+#MSE #MSE accuracy 
+
+#RMSE = sqrt(sum((testNN2$revenue.Revenue.FALSE+testNN2$revenue.Revenue.TRUE - pred.res)^2)/nrow(testNN2))
+#RMSE
+
+
+
+#q4a:
+#maxs = apply(accent[indexs, 2:12], 2, base::max) #there was a weird error here once. Restarting r fixed this. 
+#mins = apply(accent[indexs, 2:12], 2, base::min)
+
+#scale = data.frame(scale(accent[, 2:12], center = mins, scale = (maxs - mins)), activity = accent[,1]) #is scaling right? 
+
+#means = attr(indexs, "scaled:center") #retain mean from training set
+#sds = attr(indexs, "scaled:scale")
+
+#scale = data.frame(scale(accent[, 1:12], center = means, scale = sds))
+
+#acc.train = scale[indexs,] 
+#acc.test = scale[-indexs,]
+
+```
